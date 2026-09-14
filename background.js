@@ -1,5 +1,5 @@
 const EXERCISM_URL =
-    /^https:\/\/exercism\.org\/tracks\/c\/exercises\/[^/]+\/edit/;
+    /^https:\/\/exercism\.org\/tracks\/[^/]+\/exercises\/[^/]+\/edit/;
 
 const DEEPSEEK_URL =
     /^https:\/\/(chat\.)?deepseek\.com\//;
@@ -42,6 +42,31 @@ async function keyTap(tabId, key, code, modifiers = 0) {
             code,
             modifiers
         }
+    );
+}
+
+
+// ============================================================
+// CDP mouse wheel
+// ============================================================
+
+async function scrollUp(tabId, amount = 300) {
+
+    await chrome.debugger.sendCommand(
+        { tabId },
+        "Input.dispatchMouseEvent",
+        {
+            type: "mouseWheel",
+            x: 500,
+            y: 500,
+            deltaX: 0,
+            deltaY: -amount
+        }
+    );
+
+    console.log(
+        "[workflow] scrolled up:",
+        amount
     );
 }
 
@@ -193,6 +218,40 @@ async function focusDeepSeekInput(tabId) {
 
 
     return result?.result?.value;
+}
+
+
+// ============================================================
+// Wait for DeepSeek input
+// ============================================================
+
+async function waitForDeepSeekInput(
+    tabId,
+    timeout = 3000
+) {
+
+    const start = Date.now();
+
+    while (Date.now() - start < timeout) {
+
+        const input =
+            await focusDeepSeekInput(tabId);
+
+        if (input?.found) {
+
+            console.log(
+                "[workflow] input found"
+            );
+
+            return input;
+        }
+
+        await sleep(100);
+    }
+
+    throw new Error(
+        "Could not find DeepSeek input box."
+    );
 }
 
 
@@ -349,9 +408,6 @@ async function runWorkflow() {
     );
 
 
-    await sleep(1500);
-
-
     // --------------------------------------------------------
     // 6. Attach debugger
     // --------------------------------------------------------
@@ -370,30 +426,12 @@ async function runWorkflow() {
     try {
 
         // ----------------------------------------------------
-        // 7. Focus input
+        // 7. Wait for input
         // ----------------------------------------------------
 
-        const input =
-            await focusDeepSeekInput(
-                deepseek.id
-            );
-
-
-        console.log(
-            "[workflow] input:",
-            input
+        await waitForDeepSeekInput(
+            deepseek.id
         );
-
-
-        if (!input?.found) {
-
-            throw new Error(
-                "Could not find DeepSeek input box."
-            );
-        }
-
-
-        await sleep(300);
 
 
         // ----------------------------------------------------
@@ -404,9 +442,6 @@ async function runWorkflow() {
             deepseek.id,
             source
         );
-
-
-        await sleep(1000);
 
 
         // ----------------------------------------------------
@@ -422,6 +457,16 @@ async function runWorkflow() {
 
         console.log(
             "[workflow] enter sent"
+        );
+
+
+        // ----------------------------------------------------
+        // 10. Scroll up slightly
+        // ----------------------------------------------------
+
+        await scrollUp(
+            deepseek.id,
+            70
         );
 
     } finally {
