@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Exercism → DeepSeek",
+  "version": "0.2.0",
+  "description": "Copy Exercism source and send it to DeepSeek.",
+  "permissions": [
+    "tabs",
+    "offscreen",
+    "debugger"
+  ],
+  "host_permissions": [
+    "https://exercism.org/*",
+    "https://chat.deepseek.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Exercism → DeepSeek"
+  },
+  "commands": {
+    "run-workflow": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+E"
+      },
+      "description": "Send Exercism source to DeepSeek"
+    }
+  }
+}
