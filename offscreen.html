@@ -6,47 +6,7 @@
 
 <body>
 
-<script>
-// @deprecated 2026-09-14
-// This offscreen document is deprecated. Clipboard writes are now
-// handled directly from the service worker via the Clipboard API.
-// This file is kept for backward compatibility with Chrome < 116
-// and will be removed in v2.0.
-console.warn(
-    "[offscreen] DEPRECATED: use service-worker clipboard path instead"
-);
-
-console.log("[offscreen] loaded");
-
-chrome.runtime.onMessage.addListener(
-    async (message) => {
-        if (message?.type !== "write-clipboard") {
-            return;
-        }
-
-        // @deprecated Remove once all callers migrate to the new API.
-        console.log("[offscreen] clipboard request");
-
-        try {
-            await navigator.clipboard.writeText(message.text);
-            console.log("[offscreen] clipboard write OK");
-
-            await chrome.runtime.sendMessage({
-                type: "clipboard-result",
-                ok: true
-            });
-        } catch (error) {
-            console.error("[offscreen] clipboard error", error);
-
-            await chrome.runtime.sendMessage({
-                type: "clipboard-result",
-                ok: false,
-                error: String(error)
-            });
-        }
-    }
-);
-</script>
+<!-- Deprecated. Clipboard and page interaction no longer use this document. -->
 
 </body>
 </html>

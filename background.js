@@ -1,16 +1,17 @@
 //
-// issue（llm dont touch here）
+// （llm dont touch here）
+// 设计文档
 //
-// 设计思路   让llm获得充分的网站题目信息
+// 作用   让llm获得充分的网站题目信息
 //
-// 优化       修扩展错误；简化；                    上滑又下滑（静默）
+// 优化   修扩展错误；简化；上滑又下滑（静默）
 //
-// 扩展到neet codewar
-// 针对专门网页进行优化，先把无关又多的东西弄掉
-//  
-// 
+// 跨网站自动测试js     参数：延迟、llm是否获得充分信息（我手动填）
 //
-
+// issue
+//   扩展到neet codewar
+//   针对专门网页进行优化，先把无关又多的东西弄掉
+//
 
 const EXERCISM_URL =
     /^https:\/\/exercism\.org\/tracks\/[^/]+\/exercises\/[^/]+\/edit/;
@@ -21,6 +22,21 @@ const LEETCODE_URL =
 const DEEPSEEK_URL =
     /^https:\/\/(chat\.)?deepseek\.com\//;
 
+const INPUT_SELECTORS = [
+    "textarea",
+    '[contenteditable="true"]',
+    '[role="textbox"]'
+];
+
+function pageUrl(url) {
+    return typeof url === "string" && url.startsWith("view-source:")
+        ? url.slice("view-source:".length)
+        : url;
+}
+
+function isViewSourceUrl(url) {
+    return typeof url === "string" && url.startsWith("view-source:");
+}
 
 // ============================================================
 // Utility
@@ -30,41 +46,15 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-
-// ============================================================
-// Keyboard
-// ============================================================
-
 async function keyTap(tabId, key) {
-
-    await chrome.debugger.sendCommand(
-        { tabId },
-        "Input.dispatchKeyEvent",
-        {
-            type: "keyDown",
-            key
-        }
-    );
-
-    await chrome.debugger.sendCommand(
-        { tabId },
-        "Input.dispatchKeyEvent",
-        {
-            type: "keyUp",
-            key
-        }
-    );
+    for (const type of ["keyDown", "keyUp"]) {
+        await sendCommand(tabId, "Input.dispatchKeyEvent", { type, key });
+    }
 }
 
-
-// ============================================================
-// Scroll
-// ============================================================
-
 async function scrollUp(tabId, amount = 50) {
-
-    await chrome.debugger.sendCommand(
-        { tabId },
+    await sendCommand(
+        tabId,
         "Input.dispatchMouseEvent",
         {
             type: "mouseWheel",
@@ -76,136 +66,298 @@ async function scrollUp(tabId, amount = 50) {
     );
 }
 
+async function sendCommand(tabId, method, params = {}) {
+    return chrome.debugger.sendCommand({ tabId }, method, params);
+}
 
-// ============================================================
-// Get source
-// ============================================================
-
-async function getPageSource(tabId) {
-
-    const result =
-        await chrome.debugger.sendCommand(
-            { tabId },
-            "Runtime.evaluate",
-            {
-                expression: `
-                    (() => {
-
-                        const editor =
-                            document.querySelector(
-                                '[data-react-id="editor"]'
-                            );
-
-                        if (!editor) {
-                            return {
-                                found: false,
-                                reason: "editor component not found"
-                            };
-                        }
-
-                        const raw =
-                            editor.getAttribute(
-                                "data-react-data"
-                            );
-
-                        if (!raw) {
-                            return {
-                                found: false,
-                                reason: "data-react-data not found"
-                            };
-                        }
-
-                        try {
-
-                            const data =
-                                JSON.parse(raw);
-
-                            const files =
-                                data.default_files;
-
-                            if (
-                                !Array.isArray(files) ||
-                                files.length === 0
-                            ) {
-                                return {
-                                    found: false,
-                                    reason: "default_files not found"
-                                };
-                            }
-
-                            return {
-                                found: true,
-                                files
-                            };
-
-                        } catch (error) {
-
-                            return {
-                                found: false,
-                                reason:
-                                    "JSON parse failed: " +
-                                    error.message
-                            };
-                        }
-                    })()
-                `,
-                returnByValue: true
-            }
-        );
-
+async function evaluatePage(tabId, expression) {
+    const result = await sendCommand(tabId, "Runtime.evaluate", {
+        expression,
+        returnByValue: true
+    });
 
     if (result?.exceptionDetails) {
-
-        const description =
-            result.exceptionDetails.exception
-                ?.description ||
-            result.exceptionDetails.text ||
-            "Runtime.evaluate failed.";
-
-        throw new Error(description);
-    }
-
-
-    const value =
-        result?.result?.value;
-
-
-    if (!value?.found) {
-
+        const details = result.exceptionDetails;
         throw new Error(
-            "Could not extract Exercism editor data: " +
-            value?.reason
+            details.exception?.description ||
+            details.text ||
+            "Runtime.evaluate failed."
         );
     }
 
+    return result?.result?.value;
+}
 
-    const source =
-        value.files
-            .map(file => {
-
-                return (
-                    `// ${file.filename}\n` +
-                    file.content
-                );
-            })
-            .join("\n\n");
-
-
-    console.log(
-        "[workflow] Exercism source extracted:",
-        value.files.length,
-        "files,",
-        source.length,
-        "characters"
-    );
-
-
-    return source;
+async function withDebugger(tabId, task) {
+    await chrome.debugger.attach({ tabId }, "1.3");
+    try {
+        return await task();
+    } finally {
+        try {
+            await chrome.debugger.detach({ tabId });
+        } catch (_) {
+            // The tab may already be closed or detached.
+        }
+    }
 }
 
 
 // ============================================================
-// Find DeepSeek tab
+// Platform Adapters
+// ============================================================
+
+const ExercismAdapter = {
+
+    name: "Exercism",
+
+    match(url) {
+        return EXERCISM_URL.test(url);
+    },
+
+    async getSource(tabId) {
+
+        const value = await evaluatePage(tabId, `
+                        (() => {
+
+                            const editor =
+                                document.querySelector(
+                                    '[data-react-id="editor"]'
+                                );
+
+                            if (editor) {
+                                const raw = editor.getAttribute("data-react-data");
+
+                                if (raw) {
+                                    try {
+                                        const data = JSON.parse(raw);
+                                        const files = data.default_files;
+
+                                        if (Array.isArray(files) && files.length > 0) {
+                                            return { found: true, method: "Exercism data", files };
+                                        }
+                                    } catch (_) {
+                                        // Try the rendered editor below.
+                                    }
+                                }
+                            }
+
+                            const candidates = [
+                                ...document.querySelectorAll(".cm-content"),
+                                ...document.querySelectorAll("textarea"),
+                                ...document.querySelectorAll('[contenteditable="true"]')
+                            ];
+
+                            for (const element of candidates) {
+                                const source = element.value || element.innerText || element.textContent;
+                                const visible = element.offsetWidth > 0 && element.offsetHeight > 0;
+
+                                if (visible && typeof source === "string" && source.trim()) {
+                                    return {
+                                        found: true,
+                                        method: "rendered editor",
+                                        files: [{ filename: "current-source", content: source }]
+                                    };
+                                }
+                            }
+
+                            return {
+                                found: false,
+                                reason: "Exercism editor is not rendered yet"
+                            };
+
+                        })()
+                    `);
+
+        if (!value?.found) {
+            throw new Error(
+                "Could not extract Exercism editor data: " +
+                value?.reason
+            );
+        }
+
+        const source =
+            value.files
+                .map(file =>
+                    `// ${file.filename}\n${file.content}`
+                )
+                .join("\n\n");
+
+        console.log(
+            "[Exercism] source extracted via",
+            value.method,
+            value.files.length,
+            "files,",
+            source.length,
+            "characters"
+        );
+
+        return source;
+    }
+};
+
+
+const LeetCodeAdapter = {
+
+    name: "LeetCode",
+
+    match(url) {
+        return LEETCODE_URL.test(url);
+    },
+
+    async getSource(tabId) {
+
+        const value = await evaluatePage(tabId, `
+                        (() => {
+
+                            if (
+                                window.monaco &&
+                                window.monaco.editor
+                            ) {
+
+                                const models =
+                                    window.monaco.editor.getModels();
+
+                                for (const model of models) {
+
+                                    const source =
+                                        model.getValue();
+
+                                    if (
+                                        typeof source === "string" &&
+                                        source.trim()
+                                    ) {
+                                        return {
+                                            found: true,
+                                            method: "Monaco",
+                                            source
+                                        };
+                                    }
+                                }
+                            }
+
+                            const cmContent =
+                                document.querySelector(
+                                    ".cm-editor .cm-content"
+                                );
+
+                            if (cmContent) {
+
+                                const source =
+                                    cmContent.innerText;
+
+                                if (
+                                    typeof source === "string" &&
+                                    source.trim()
+                                ) {
+                                    return {
+                                        found: true,
+                                        method: "CodeMirror",
+                                        source
+                                    };
+                                }
+                            }
+
+                            const textareas =
+                                document.querySelectorAll("textarea");
+
+                            for (const textarea of textareas) {
+
+                                if (
+                                    textarea.offsetWidth > 0 &&
+                                    textarea.offsetHeight > 0 &&
+                                    textarea.value?.trim()
+                                ) {
+                                    return {
+                                        found: true,
+                                        method: "textarea",
+                                        source: textarea.value
+                                    };
+                                }
+                            }
+
+                            const editables =
+                                document.querySelectorAll(
+                                    '[contenteditable="true"]'
+                                );
+
+                            for (const element of editables) {
+
+                                if (
+                                    element.offsetWidth > 0 &&
+                                    element.offsetHeight > 0 &&
+                                    element.innerText?.trim()
+                                ) {
+                                    return {
+                                        found: true,
+                                        method: "contenteditable",
+                                        source: element.innerText
+                                    };
+                                }
+                            }
+
+                            return {
+                                found: false,
+                                reason: "editor not found"
+                            };
+
+                        })()
+                    `);
+
+        if (!value?.found) {
+            throw new Error(
+                "Could not extract LeetCode editor source: " +
+                value?.reason
+            );
+        }
+
+        console.log(
+            "[LeetCode] source extracted:",
+            value.method,
+            value.source.length,
+            "characters"
+        );
+
+        return value.source;
+    }
+};
+
+
+// ============================================================
+// Platform Registry
+// ============================================================
+
+const PLATFORMS = [
+    ExercismAdapter,
+    LeetCodeAdapter
+];
+
+function getPlatform(url) {
+
+    if (isViewSourceUrl(url)) {
+        throw new Error(
+            "Open the normal Exercism page instead of view-source:; Chrome does not allow extensions to attach to view-source pages."
+        );
+    }
+
+    const normalizedUrl = pageUrl(url);
+
+    const platform =
+        PLATFORMS.find(platform =>
+            platform.match(normalizedUrl)
+        );
+
+    if (!platform) {
+        throw new Error(
+            "Current page is not a supported coding exercise page."
+        );
+    }
+
+    return platform;
+}
+
+
+// ============================================================
+// DeepSeek
 // ============================================================
 
 async function findDeepSeekTab() {
@@ -213,18 +365,15 @@ async function findDeepSeekTab() {
     const tabs =
         await chrome.tabs.query({});
 
-
     for (const tab of tabs) {
 
         if (
             tab.url &&
             DEEPSEEK_URL.test(tab.url)
         ) {
-
             return tab;
         }
     }
-
 
     throw new Error(
         "DeepSeek tab not found."
@@ -232,90 +381,46 @@ async function findDeepSeekTab() {
 }
 
 
-// ============================================================
-// Focus DeepSeek input
-// ============================================================
-
 async function focusDeepSeekInput(tabId) {
-
-    const result =
-        await chrome.debugger.sendCommand(
-            { tabId },
-            "Runtime.evaluate",
-            {
-                expression: `
+    const found = await evaluatePage(tabId, `
                     (() => {
-
-                        const selectors = [
-                            "textarea",
-                            '[contenteditable="true"]',
-                            '[role="textbox"]'
-                        ];
-
-                        for (const selector of selectors) {
-
-                            const elements =
-                                document.querySelectorAll(
-                                    selector
-                                );
-
-                            for (const element of elements) {
-
-                                if (
-                                    element.offsetWidth > 0 &&
-                                    element.offsetHeight > 0
-                                ) {
-
+                        for (const selector of ${JSON.stringify(INPUT_SELECTORS)}) {
+                            for (const element of document.querySelectorAll(selector)) {
+                                if (element.offsetWidth > 0 && element.offsetHeight > 0) {
                                     element.focus();
-
                                     return true;
                                 }
                             }
                         }
 
                         return false;
+
                     })()
-                `,
-                returnByValue: true
-            }
-        );
+                `);
 
-
-    return result?.result?.value === true;
+    return found === true;
 }
 
-
-// ============================================================
-// Wait for DeepSeek input
-// ============================================================
 
 async function waitForDeepSeekInput(
     tabId,
     timeout = 3000
 ) {
 
-    const start =
-        performance.now();
-
+    const start = performance.now();
 
     while (
-        performance.now() - start <
-        timeout
+        performance.now() - start < timeout
     ) {
 
-        const found =
-            await focusDeepSeekInput(tabId);
-
-
-        if (found) {
-
+        if (
+            await focusDeepSeekInput(tabId)
+        ) {
             return;
         }
 
-
         await sleep(100);
     }
-
 
     throw new Error(
         "DeepSeek input not found."
@@ -323,52 +428,53 @@ async function waitForDeepSeekInput(
 }
 
 
-// ============================================================
-// Insert text
-// ============================================================
+async function insertText(tabId, text) {
 
-async function insertText(
-    tabId,
-    text
-) {
-
-    await chrome.debugger.sendCommand(
-        { tabId },
-        "Input.insertText",
-        {
-            text
-        }
-    );
+    await sendCommand(tabId, "Input.insertText", { text });
 }
 
 
 // ============================================================
-// Main workflow
+// Main Workflow
 // ============================================================
 
+let workflowPromise = null;
+
 async function runWorkflow() {
+
+    if (workflowPromise) {
+        console.warn("[workflow] Already running; ignoring duplicate trigger.");
+        return workflowPromise;
+    }
+
+    workflowPromise = runWorkflowOnce();
+
+    try {
+        return await workflowPromise;
+    } finally {
+        workflowPromise = null;
+    }
+}
+
+async function runWorkflowOnce() {
 
     const totalStart =
         performance.now();
 
-
     function mark(label, start) {
-
         console.log(
             `[profiler] ${label}:`,
-            Math.round(performance.now() - start),
+            Math.round(
+                performance.now() - start
+            ),
             "ms"
         );
     }
 
 
-    // ========================================================
     // Current tab
-    // ========================================================
 
-    let start =
-        performance.now();
-
+    let start = performance.now();
 
     const tabs =
         await chrome.tabs.query({
@@ -376,121 +482,47 @@ async function runWorkflow() {
             currentWindow: true
         });
 
+    const currentTab = tabs[0];
 
-    const currentTab =
-        tabs[0];
-
-
-    mark(
-        "tabs.query",
-        start
-    );
-
+    mark("tabs.query", start);
 
     if (!currentTab?.id) {
-
         throw new Error(
             "Current tab not found."
         );
     }
 
 
-    // ========================================================
-    // Validate current page
-    // ========================================================
+    // Platform
 
-    if (
-        !EXERCISM_URL.test(currentTab.url) &&
-        !LEETCODE_URL.test(currentTab.url)
-    ) {
+    const platform =
+        getPlatform(currentTab.url);
 
-        throw new Error(
-            "Current page is not a supported exercise page."
-        );
-    }
-
-
-    // ========================================================
-    // Attach to exercise page
-    // ========================================================
-
-    start =
-        performance.now();
-
-
-    await chrome.debugger.attach(
-        { tabId: currentTab.id },
-        "1.3"
+    console.log(
+        "[workflow] platform:",
+        platform.name
     );
 
 
-    mark(
-        "Exercise debugger.attach",
-        start
-    );
+    // Exercise page
+
+    start = performance.now();
+
+    const source = await withDebugger(currentTab.id, async () => {
+        start = performance.now();
+        const result = await platform.getSource(currentTab.id);
+        mark(`${platform.name}.getSource`, start);
+        console.log("[workflow] source:", result.length, "characters");
+        return result;
+    });
 
 
-    let source;
+    // DeepSeek
 
-
-    try {
-
-        // ====================================================
-        // Get source
-        // ====================================================
-
-        start =
-            performance.now();
-
-
-        source =
-            await getPageSource(
-                currentTab.id,
-                currentTab.url
-            );
-
-
-        mark(
-            "getPageSource",
-            start
-        );
-
-
-        console.log(
-            "[workflow] page source:",
-            source.length,
-            "characters"
-        );
-
-    } finally {
-
-        start =
-            performance.now();
-
-
-        await chrome.debugger.detach({
-            tabId: currentTab.id
-        });
-
-
-        mark(
-            "Exercise debugger.detach",
-            start
-        );
-    }
-
-
-    // ========================================================
-    // Find DeepSeek
-    // ========================================================
-
-    start =
-        performance.now();
-
+    start = performance.now();
 
     const deepSeekTab =
         await findDeepSeekTab();
-
 
     mark(
         "findDeepSeekTab",
@@ -498,29 +530,12 @@ async function runWorkflow() {
     );
 
 
-    if (!deepSeekTab?.id) {
-
-        throw new Error(
-            "DeepSeek tab not found."
-        );
-    }
-
-
-    // ========================================================
-    // Activate DeepSeek
-    // ========================================================
-
-    start =
-        performance.now();
-
+    start = performance.now();
 
     await chrome.tabs.update(
         deepSeekTab.id,
-        {
-            active: true
-        }
+        { active: true }
     );
-
 
     mark(
         "activate DeepSeek",
@@ -528,40 +543,16 @@ async function runWorkflow() {
     );
 
 
-    // ========================================================
-    // Attach DeepSeek
-    // ========================================================
+    start = performance.now();
 
-    start =
-        performance.now();
+    await withDebugger(deepSeekTab.id, async () => {
+        // Input
 
-
-    await chrome.debugger.attach(
-        { tabId: deepSeekTab.id },
-        "1.3"
-    );
-
-
-    mark(
-        "DeepSeek debugger.attach",
-        start
-    );
-
-
-    try {
-
-        // ====================================================
-        // Find input
-        // ====================================================
-
-        start =
-            performance.now();
-
+        start = performance.now();
 
         await waitForDeepSeekInput(
             deepSeekTab.id
         );
-
 
         mark(
             "waitForDeepSeekInput",
@@ -569,19 +560,14 @@ async function runWorkflow() {
         );
 
 
-        // ====================================================
-        // Insert source
-        // ====================================================
+        // Insert
 
-        start =
-            performance.now();
-
+        start = performance.now();
 
         await insertText(
             deepSeekTab.id,
             source
         );
-
 
         mark(
             `insertText (${source.length} chars)`,
@@ -589,19 +575,14 @@ async function runWorkflow() {
         );
 
 
-        // ====================================================
         // Enter
-        // ====================================================
 
-        start =
-            performance.now();
-
+        start = performance.now();
 
         await keyTap(
             deepSeekTab.id,
             "Enter"
         );
-
 
         mark(
             "Enter",
@@ -609,48 +590,27 @@ async function runWorkflow() {
         );
 
 
-        // ====================================================
         // Scroll
-        // ====================================================
 
-        start =
-            performance.now();
-
+        start = performance.now();
 
         await scrollUp(
             deepSeekTab.id,
             50
         );
 
-
         mark(
             "scroll",
             start
         );
 
-    } finally {
-
-        start =
-            performance.now();
-
-
-        await chrome.debugger.detach({
-            tabId: deepSeekTab.id
-        });
-
-
-        mark(
-            "DeepSeek debugger.detach",
-            start
-        );
-    }
+    });
 
 
     console.log(
         "[profiler] TOTAL:",
         Math.round(
-            performance.now() -
-            totalStart
+            performance.now() - totalStart
         ),
         "ms"
     );
@@ -665,16 +625,12 @@ chrome.action.onClicked.addListener(
     async () => {
 
         try {
-
             await runWorkflow();
-
         } catch (error) {
-
             console.error(
                 "[workflow] ERROR:",
                 error
             );
-
         }
     }
 );
@@ -688,21 +644,18 @@ chrome.commands.onCommand.addListener(
     async command => {
 
         if (
-            command === "send_to_deepseek"
+            command !== "run-workflow"
         ) {
+            return;
+        }
 
-            try {
-
-                await runWorkflow();
-
-            } catch (error) {
-
-                console.error(
-                    "[workflow] ERROR:",
-                    error
-                );
-
-            }
+        try {
+            await runWorkflow();
+        } catch (error) {
+            console.error(
+                "[workflow] ERROR:",
+                error
+            );
         }
     }
 );

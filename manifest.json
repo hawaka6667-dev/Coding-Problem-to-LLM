@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Exercism → DeepSeek",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Copy Exercism source and send it to DeepSeek.",
   "permissions": [
     "tabs",
-    "offscreen",
     "debugger"
   ],
   "host_permissions": [
     "https://exercism.org/*",
+    "https://leetcode.com/*",
     "https://chat.deepseek.com/*"
   ],
   "background": {
