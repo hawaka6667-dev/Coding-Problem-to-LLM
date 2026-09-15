@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Exercism → DeepSeek",
+  "name": "Coding-Problem-to-LLM",
   "version": "0.3.0",
-  "description": "Copy Exercism source and send it to DeepSeek.",
+  "description": "Send coding problems from Exercism, LeetCode, etc. directly to any LLM for review and discussion.",
   "permissions": [
     "tabs",
     "debugger"
@@ -16,14 +16,14 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Exercism → DeepSeek"
+    "default_title": "Coding-Problem-to-LLM - Send to LLM"
   },
   "commands": {
     "run-workflow": {
       "suggested_key": {
         "default": "Ctrl+Shift+E"
       },
-      "description": "Send Exercism source to DeepSeek"
+      "description": "Send coding problem to LLM"
     }
   }
 }
