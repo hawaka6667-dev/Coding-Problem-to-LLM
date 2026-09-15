@@ -1,14 +1,22 @@
 //
-//issue（llm dont touch here）
+// issue（llm dont touch here）
 //
-//修扩展错误；简化
+// 设计思路   让llm获得充分的网站题目信息
 //
-//扩展到leetcode
-//针对专门网页进行优化
+// 优化       修扩展错误；简化；                    上滑又下滑（静默）
 //
+// 扩展到neet codewar
+// 针对专门网页进行优化，先把无关又多的东西弄掉
+//  
+// 
 //
+
+
 const EXERCISM_URL =
     /^https:\/\/exercism\.org\/tracks\/[^/]+\/exercises\/[^/]+\/edit/;
+
+const LEETCODE_URL =
+    /^https:\/\/leetcode\.com\/problems\/[^/]+\/?/;
 
 const DEEPSEEK_URL =
     /^https:\/\/(chat\.)?deepseek\.com\//;
@@ -24,42 +32,36 @@ function sleep(ms) {
 
 
 // ============================================================
-// CDP keyboard
+// Keyboard
 // ============================================================
 
-async function keyTap(tabId, key, code, modifiers = 0) {
-
-    const target = { tabId };
+async function keyTap(tabId, key) {
 
     await chrome.debugger.sendCommand(
-        target,
+        { tabId },
         "Input.dispatchKeyEvent",
         {
             type: "keyDown",
-            key,
-            code,
-            modifiers
+            key
         }
     );
 
     await chrome.debugger.sendCommand(
-        target,
+        { tabId },
         "Input.dispatchKeyEvent",
         {
             type: "keyUp",
-            key,
-            code,
-            modifiers
+            key
         }
     );
 }
 
 
 // ============================================================
-// CDP mouse wheel
+// Scroll
 // ============================================================
 
-async function scrollUp(tabId, amount = 300) {
+async function scrollUp(tabId, amount = 50) {
 
     await chrome.debugger.sendCommand(
         { tabId },
@@ -68,27 +70,18 @@ async function scrollUp(tabId, amount = 300) {
             type: "mouseWheel",
             x: 500,
             y: 500,
-            deltaX: 0,
-            deltaY: -amount
+            deltaY: -amount,
+            deltaX: 0
         }
-    );
-
-    console.log(
-        "[workflow] scrolled up:",
-        amount
     );
 }
 
 
 // ============================================================
-// Get Exercism HTML
+// Get source
 // ============================================================
 
 async function getPageSource(tabId) {
-
-    console.log(
-        "[workflow] fetching original HTML"
-    );
 
     const result =
         await chrome.debugger.sendCommand(
@@ -96,20 +89,66 @@ async function getPageSource(tabId) {
             "Runtime.evaluate",
             {
                 expression: `
-                    fetch(location.href, {
-                        credentials: "include"
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(
-                                "HTTP " + response.status
+                    (() => {
+
+                        const editor =
+                            document.querySelector(
+                                '[data-react-id="editor"]'
                             );
+
+                        if (!editor) {
+                            return {
+                                found: false,
+                                reason: "editor component not found"
+                            };
                         }
 
-                        return response.text();
-                    })
+                        const raw =
+                            editor.getAttribute(
+                                "data-react-data"
+                            );
+
+                        if (!raw) {
+                            return {
+                                found: false,
+                                reason: "data-react-data not found"
+                            };
+                        }
+
+                        try {
+
+                            const data =
+                                JSON.parse(raw);
+
+                            const files =
+                                data.default_files;
+
+                            if (
+                                !Array.isArray(files) ||
+                                files.length === 0
+                            ) {
+                                return {
+                                    found: false,
+                                    reason: "default_files not found"
+                                };
+                            }
+
+                            return {
+                                found: true,
+                                files
+                            };
+
+                        } catch (error) {
+
+                            return {
+                                found: false,
+                                reason:
+                                    "JSON parse failed: " +
+                                    error.message
+                            };
+                        }
+                    })()
                 `,
-                awaitPromise: true,
                 returnByValue: true
             }
         );
@@ -127,18 +166,38 @@ async function getPageSource(tabId) {
     }
 
 
-    const source =
+    const value =
         result?.result?.value;
 
 
-    if (
-        typeof source !== "string" ||
-        !source.trim()
-    ) {
+    if (!value?.found) {
+
         throw new Error(
-            "Page source is empty."
+            "Could not extract Exercism editor data: " +
+            value?.reason
         );
     }
+
+
+    const source =
+        value.files
+            .map(file => {
+
+                return (
+                    `// ${file.filename}\n` +
+                    file.content
+                );
+            })
+            .join("\n\n");
+
+
+    console.log(
+        "[workflow] Exercism source extracted:",
+        value.files.length,
+        "files,",
+        source.length,
+        "characters"
+    );
 
 
     return source;
@@ -146,22 +205,35 @@ async function getPageSource(tabId) {
 
 
 // ============================================================
-// Find DeepSeek
+// Find DeepSeek tab
 // ============================================================
 
 async function findDeepSeekTab() {
 
-    const tabs = await chrome.tabs.query({});
+    const tabs =
+        await chrome.tabs.query({});
 
-    return tabs.find(tab =>
-        tab.url &&
-        DEEPSEEK_URL.test(tab.url)
+
+    for (const tab of tabs) {
+
+        if (
+            tab.url &&
+            DEEPSEEK_URL.test(tab.url)
+        ) {
+
+            return tab;
+        }
+    }
+
+
+    throw new Error(
+        "DeepSeek tab not found."
     );
 }
 
 
 // ============================================================
-// Find DeepSeek input
+// Focus DeepSeek input
 // ============================================================
 
 async function focusDeepSeekInput(tabId) {
@@ -175,7 +247,7 @@ async function focusDeepSeekInput(tabId) {
                     (() => {
 
                         const selectors = [
-                            'textarea',
+                            "textarea",
                             '[contenteditable="true"]',
                             '[role="textbox"]'
                         ];
@@ -189,36 +261,19 @@ async function focusDeepSeekInput(tabId) {
 
                             for (const element of elements) {
 
-                                const rect =
-                                    element.getBoundingClientRect();
-
-                                const style =
-                                    getComputedStyle(element);
-
                                 if (
-                                    rect.width > 0 &&
-                                    rect.height > 0 &&
-                                    style.visibility !== "hidden" &&
-                                    style.display !== "none"
+                                    element.offsetWidth > 0 &&
+                                    element.offsetHeight > 0
                                 ) {
 
                                     element.focus();
 
-                                    return {
-                                        found: true,
-                                        tag: element.tagName,
-                                        contenteditable:
-                                            element.getAttribute(
-                                                "contenteditable"
-                                            )
-                                    };
+                                    return true;
                                 }
                             }
                         }
 
-                        return {
-                            found: false
-                        };
+                        return false;
                     })()
                 `,
                 returnByValue: true
@@ -226,7 +281,7 @@ async function focusDeepSeekInput(tabId) {
         );
 
 
-    return result?.result?.value;
+    return result?.result?.value === true;
 }
 
 
@@ -239,43 +294,43 @@ async function waitForDeepSeekInput(
     timeout = 3000
 ) {
 
-    const start = Date.now();
+    const start =
+        performance.now();
 
-    while (Date.now() - start < timeout) {
 
-        const input =
+    while (
+        performance.now() - start <
+        timeout
+    ) {
+
+        const found =
             await focusDeepSeekInput(tabId);
 
-        if (input?.found) {
 
-            console.log(
-                "[workflow] input found"
-            );
+        if (found) {
 
-            return input;
+            return;
         }
+
 
         await sleep(100);
     }
 
+
     throw new Error(
-        "Could not find DeepSeek input box."
+        "DeepSeek input not found."
     );
 }
 
 
 // ============================================================
-// Insert text through CDP
+// Insert text
 // ============================================================
 
-async function insertText(tabId, text) {
-
-    console.log(
-        "[workflow] inserting",
-        text.length,
-        "characters"
-    );
-
+async function insertText(
+    tabId,
+    text
+) {
 
     await chrome.debugger.sendCommand(
         { tabId },
@@ -283,11 +338,6 @@ async function insertText(tabId, text) {
         {
             text
         }
-    );
-
-
-    console.log(
-        "[workflow] text inserted"
     );
 }
 
@@ -298,70 +348,86 @@ async function insertText(tabId, text) {
 
 async function runWorkflow() {
 
-    const totalStart = performance.now();
+    const totalStart =
+        performance.now();
+
 
     function mark(label, start) {
+
         console.log(
-            `[perf] ${label}:`,
+            `[profiler] ${label}:`,
             Math.round(performance.now() - start),
             "ms"
         );
     }
 
 
-    // --------------------------------------------------------
-    // 1. Current Exercism tab
-    // --------------------------------------------------------
+    // ========================================================
+    // Current tab
+    // ========================================================
 
-    let start = performance.now();
+    let start =
+        performance.now();
 
-    const [currentTab] =
+
+    const tabs =
         await chrome.tabs.query({
             active: true,
-            lastFocusedWindow: true
+            currentWindow: true
         });
 
-    mark("tabs.query", start);
+
+    const currentTab =
+        tabs[0];
 
 
-    if (
-        !currentTab?.id ||
-        !currentTab.url
-    ) {
-        throw new Error(
-            "No active tab."
-        );
-    }
-
-
-    if (
-        !EXERCISM_URL.test(
-            currentTab.url
-        )
-    ) {
-        throw new Error(
-            "Current page is not an Exercism exercise /edit page."
-        );
-    }
-
-
-    console.log(
-        "[workflow] Exercism detected"
+    mark(
+        "tabs.query",
+        start
     );
 
 
-    // --------------------------------------------------------
-    // 2. Attach Exercism
-    // --------------------------------------------------------
+    if (!currentTab?.id) {
 
-    start = performance.now();
+        throw new Error(
+            "Current tab not found."
+        );
+    }
+
+
+    // ========================================================
+    // Validate current page
+    // ========================================================
+
+    if (
+        !EXERCISM_URL.test(currentTab.url) &&
+        !LEETCODE_URL.test(currentTab.url)
+    ) {
+
+        throw new Error(
+            "Current page is not a supported exercise page."
+        );
+    }
+
+
+    // ========================================================
+    // Attach to exercise page
+    // ========================================================
+
+    start =
+        performance.now();
+
 
     await chrome.debugger.attach(
         { tabId: currentTab.id },
         "1.3"
     );
 
-    mark("Exercism debugger.attach", start);
+
+    mark(
+        "Exercise debugger.attach",
+        start
+    );
 
 
     let source;
@@ -369,18 +435,25 @@ async function runWorkflow() {
 
     try {
 
-        // ----------------------------------------------------
-        // 3. Get HTML
-        // ----------------------------------------------------
+        // ====================================================
+        // Get source
+        // ====================================================
 
-        start = performance.now();
+        start =
+            performance.now();
+
 
         source =
             await getPageSource(
-                currentTab.id
+                currentTab.id,
+                currentTab.url
             );
 
-        mark("getPageSource", start);
+
+        mark(
+            "getPageSource",
+            start
+        );
 
 
         console.log(
@@ -391,101 +464,124 @@ async function runWorkflow() {
 
     } finally {
 
-        start = performance.now();
-
-        try {
-
-            await chrome.debugger.detach({
-                tabId: currentTab.id
-            });
-
-        } catch (_) {}
-
-        mark("Exercism debugger.detach", start);
-    }
+        start =
+            performance.now();
 
 
-    // --------------------------------------------------------
-    // 4. Find DeepSeek
-    // --------------------------------------------------------
-
-    start = performance.now();
-
-    const deepseek =
-        await findDeepSeekTab();
-
-    mark("findDeepSeekTab", start);
+        await chrome.debugger.detach({
+            tabId: currentTab.id
+        });
 
 
-    if (!deepseek?.id) {
-
-        throw new Error(
-            "No DeepSeek tab found. Open DeepSeek first."
+        mark(
+            "Exercise debugger.detach",
+            start
         );
     }
 
 
-    console.log(
-        "[workflow] DeepSeek tab:",
-        deepseek.id
+    // ========================================================
+    // Find DeepSeek
+    // ========================================================
+
+    start =
+        performance.now();
+
+
+    const deepSeekTab =
+        await findDeepSeekTab();
+
+
+    mark(
+        "findDeepSeekTab",
+        start
     );
 
 
-    // --------------------------------------------------------
-    // 5. Activate DeepSeek
-    // --------------------------------------------------------
+    if (!deepSeekTab?.id) {
 
-    start = performance.now();
+        throw new Error(
+            "DeepSeek tab not found."
+        );
+    }
+
+
+    // ========================================================
+    // Activate DeepSeek
+    // ========================================================
+
+    start =
+        performance.now();
+
 
     await chrome.tabs.update(
-        deepseek.id,
+        deepSeekTab.id,
         {
             active: true
         }
     );
 
-    mark("activate DeepSeek", start);
+
+    mark(
+        "activate DeepSeek",
+        start
+    );
 
 
-    // --------------------------------------------------------
-    // 6. Attach debugger
-    // --------------------------------------------------------
+    // ========================================================
+    // Attach DeepSeek
+    // ========================================================
 
-    start = performance.now();
+    start =
+        performance.now();
+
 
     await chrome.debugger.attach(
-        { tabId: deepseek.id },
+        { tabId: deepSeekTab.id },
         "1.3"
     );
 
-    mark("DeepSeek debugger.attach", start);
+
+    mark(
+        "DeepSeek debugger.attach",
+        start
+    );
 
 
     try {
 
-        // ----------------------------------------------------
-        // 7. Find input
-        // ----------------------------------------------------
+        // ====================================================
+        // Find input
+        // ====================================================
 
-        start = performance.now();
+        start =
+            performance.now();
+
 
         await waitForDeepSeekInput(
-            deepseek.id
+            deepSeekTab.id
         );
 
-        mark("waitForDeepSeekInput", start);
+
+        mark(
+            "waitForDeepSeekInput",
+            start
+        );
 
 
-        // ----------------------------------------------------
-        // 8. Insert source
-        // ----------------------------------------------------
+        // ====================================================
+        // Insert source
+        // ====================================================
 
-        start = performance.now();
+        start =
+            performance.now();
+
 
         await insertText(
-            deepseek.id,
+            deepSeekTab.id,
             source
         );
+
 
         mark(
             `insertText (${source.length} chars)`,
@@ -493,69 +589,76 @@ async function runWorkflow() {
         );
 
 
-        // ----------------------------------------------------
-        // 9. Enter
-        // ----------------------------------------------------
+        // ====================================================
+        // Enter
+        // ====================================================
 
-        start = performance.now();
+        start =
+            performance.now();
+
 
         await keyTap(
-            deepseek.id,
-            "Enter",
+            deepSeekTab.id,
             "Enter"
         );
 
-        mark("Enter", start);
 
-
-        console.log(
-            "[workflow] enter sent"
+        mark(
+            "Enter",
+            start
         );
 
 
-        // ----------------------------------------------------
-        // 10. Scroll
-        // ----------------------------------------------------
+        // ====================================================
+        // Scroll
+        // ====================================================
 
-        start = performance.now();
+        start =
+            performance.now();
+
 
         await scrollUp(
-            deepseek.id,
-            70
+            deepSeekTab.id,
+            50
         );
 
-        mark("scroll", start);
+
+        mark(
+            "scroll",
+            start
+        );
 
     } finally {
 
-        start = performance.now();
+        start =
+            performance.now();
 
-        try {
 
-            await chrome.debugger.detach({
-                tabId: deepseek.id
-            });
+        await chrome.debugger.detach({
+            tabId: deepSeekTab.id
+        });
 
-        } catch (_) {}
 
-        mark("DeepSeek debugger.detach", start);
+        mark(
+            "DeepSeek debugger.detach",
+            start
+        );
     }
 
 
     console.log(
-        "[perf] TOTAL:",
-        Math.round(performance.now() - totalStart),
+        "[profiler] TOTAL:",
+        Math.round(
+            performance.now() -
+            totalStart
+        ),
         "ms"
-    );
-
-
-    console.log(
-        "[workflow] DONE"
     );
 }
 
+
 // ============================================================
-// Extension button
+// Action button
 // ============================================================
 
 chrome.action.onClicked.addListener(
@@ -568,39 +671,38 @@ chrome.action.onClicked.addListener(
         } catch (error) {
 
             console.error(
-                "[Exercism → DeepSeek]",
+                "[workflow] ERROR:",
                 error
             );
+
         }
     }
 );
 
 
 // ============================================================
-// Ctrl+Shift+E
+// Command
 // ============================================================
 
 chrome.commands.onCommand.addListener(
     async command => {
 
         if (
-            command !==
-            "run-workflow"
+            command === "send_to_deepseek"
         ) {
-            return;
-        }
 
+            try {
 
-        try {
+                await runWorkflow();
 
-            await runWorkflow();
+            } catch (error) {
 
-        } catch (error) {
+                console.error(
+                    "[workflow] ERROR:",
+                    error
+                );
 
-            console.error(
-                "[Exercism → DeepSeek]",
-                error
-            );
+            }
         }
     }
 );
