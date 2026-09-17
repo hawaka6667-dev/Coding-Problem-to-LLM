@@ -5,10 +5,20 @@ the manual development and testing workflow.
 
 ## Architecture
 
-`background.js` is the Manifest V3 service worker. It reads the active
-Exercism or LeetCode context with `chrome.scripting.executeScript`, finds a
-nearby LLM tab, builds a prompt from the captured page content, inserts it,
-and submits it.
+`background.js` is the Manifest V3 service-worker entry point. It loads the
+worker files in dependency order with `importScripts`:
+
+- `worker/config.js`: URL patterns, LLM providers, and input selectors.
+- `worker/page-utils.js`: page injection, keyboard events, scrolling, and
+	timing helpers.
+- `worker/adapters.js`: Exercism and LeetCode page adapters.
+- `worker/routing.js`: platform selection and captured-content assembly.
+- `worker/llm.js`: LLM tab selection and input operations.
+- `worker/workflow.js`: the main workflow and Chrome event listeners.
+
+The service worker reads the active Exercism or LeetCode context with
+`chrome.scripting.executeScript`, finds a nearby LLM tab, assembles the
+captured page content, inserts it, and submits it.
 
 Exercism extraction first tries embedded exercise data, then falls back to
 rendered CodeMirror, textarea, or contenteditable editors. `view-source:` pages
@@ -30,6 +40,11 @@ Website-specific behavior belongs in the corresponding adapter or content
 script. The general workflow should not contain selectors for a particular
 website.
 
+Functions passed to `chrome.scripting.executeScript` run in the target page,
+not in the service worker. They must be self-contained and must not reference
+helpers from another worker file. This boundary is especially important for
+the Exercism `Ctrl+Enter` button automation.
+
 ### Main workflow
 
 `Ctrl+Shift+E` is the Manifest `commands` shortcut. It starts the main
@@ -50,8 +65,8 @@ in sequence.
 - Click `Submit` after continuing.
 
 This flow is implemented in `content.js` and the Exercism adapter in
-`background.js`. Chrome does not accept `Ctrl+Enter` as a Manifest `commands`
-shortcut, so the page content script owns this key binding.
+`worker/adapters.js`. Chrome does not accept `Ctrl+Enter` as a Manifest
+`commands` shortcut, so the page content script owns this key binding.
 
 ### LLM tab selection
 

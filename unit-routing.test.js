@@ -10,6 +10,7 @@ const vm = require("node:vm");
 
 function loadWorker() {
     const listeners = {};
+    const path = require("node:path");
     const chrome = {
         action: { onClicked: { addListener: listener => { listeners.clicked = listener; } } },
         commands: { onCommand: { addListener: listener => { listeners.command = listener; } } },
@@ -30,8 +31,15 @@ function loadWorker() {
         clearTimeout
     });
 
+    context.importScripts = (...files) => {
+        for (const file of files) {
+            const source = fs.readFileSync(path.join(__dirname, file), "utf8");
+            vm.runInContext(source, context, { filename: file });
+        }
+    };
+
     const source = fs.readFileSync(
-        require("node:path").join(__dirname, "background.js"),
+        path.join(__dirname, "background.js"),
         "utf8"
     );
     vm.runInContext(source, context);
@@ -134,6 +142,30 @@ test("builds a prompt with LeetCode context and source", () => {
     assert.doesNotMatch(prompt, /最近一次运行\/提交反馈/);
 });
 
+test("does not transport LeetCode editorial guidance", () => {
+    const { context } = loadWorker();
+    const prompt = vm.runInContext(
+        "buildPrompt({ platform: 'LeetCode', description: 'Write a function createHelloWorld.\\nQuestions you should ask yourself and get answer to in the editorial section.\\nCan you solve this real interview question?\\nExample 1: Input: args = []' })",
+        context
+    );
+
+    assert.equal(prompt, "Write a function createHelloWorld.");
+    assert.doesNotMatch(prompt, /Questions you should ask yourself/);
+    assert.doesNotMatch(prompt, /Can you solve this real interview question/);
+});
+
+test("does not transport LeetCode performance rankings", () => {
+    const { context } = loadWorker();
+    const prompt = vm.runInContext(
+        "buildPrompt({ platform: 'LeetCode', description: 'Given a function fn, return a new function.', feedback: 'Accepted\\nBeats 99.56% of js users with 36 ms runtime' })",
+        context
+    );
+
+    assert.match(prompt, /Accepted/);
+    assert.doesNotMatch(prompt, /Beats 99\.56%/);
+    assert.doesNotMatch(prompt, /36 ms runtime/);
+});
+
 test("adds submission feedback to the prompt when available", () => {
     const { context } = loadWorker();
     const prompt = vm.runInContext(
@@ -144,3 +176,4 @@ test("adds submission feedback to the prompt when available", () => {
     assert.match(prompt, /Expected: 2/);
     assert.doesNotMatch(prompt, /最近一次运行\/提交反馈/);
 });
+
