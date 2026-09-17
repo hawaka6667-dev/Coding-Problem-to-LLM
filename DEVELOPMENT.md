@@ -17,6 +17,13 @@ are rejected because they are not supported extension page targets.
 The extension requires `tabs` and `scripting` permissions, plus host access for
 Exercism, LeetCode, and the supported LLM websites.
 
+### Extension responsibility
+
+The extension is a transport layer. It captures content already present on the
+coding website, removes unrelated page-generated sections when required, and
+passes the remaining title, problem text, source code, and visible feedback to
+the LLM.
+
 ## Website design requirements
 
 Website-specific behavior belongs in the corresponding adapter or content
@@ -31,7 +38,13 @@ the captured content, and send it.
 
 ### Exercism
 
-- `Ctrl+Enter` starts the visible `Run Tests` action.
+This automation is custom extension logic, not a native Exercism feature. The
+site does not provide a dedicated API or supported shortcut for this flow, so
+we implement the interaction by detecting the visible buttons and clicking them
+in sequence.
+
+- First, check whether the page is already in the commit-ready state.
+- Otherwise, click the visible `Run Tests` action.
 - When the slow automated feedback screen appears, click `Continue without
 	waiting` instead of blocking on the feedback request.
 - Click `Submit` after continuing.
@@ -54,9 +67,12 @@ shortcut, so the page content script owns this key binding.
 
 - Send only content captured from the website. Do not add labels, instructions,
 	or Markdown fences in `buildPrompt`.
-- LeetCode context may include the title, description, editor source, and the
-	latest visible result such as `Wrong Answer`, expected output, or actual
-	output.
+- LeetCode context may include the title, visible description, editor source,
+	and the latest visible result such as `Wrong Answer`, expected output, or
+	actual output.
+- Do not use LeetCode SEO/meta descriptions as a substitute for visible
+	problem content. Exclude `Editorial`, `Questions you should ask yourself`,
+	and performance-ranking text such as `Beats 99%`.
 - If no result is visible, omit the feedback content entirely.
 
 The initial context flow is implemented. More robust submission-result

@@ -20,7 +20,11 @@
 - 发给 LLM 内容不包含图片媒体。
 
 
-后续
-添加更多做题网站支持，如牛客网、codewar。。
-修改后自动 Reload 扩展。
-发帖。
+
+/后续
+修改后自动 Reload 扩展
+
+添加更多做题网站支持，如牛客网、codewar。。            +测试
+优化icon
+寻找社区issue然后过去发帖    包括但不限于国内外
+自动爬取git issue维护 No newline at end of file No newline at end of file
