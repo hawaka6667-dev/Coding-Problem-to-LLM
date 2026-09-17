@@ -1,5 +1,8 @@
 /*
- * Browser smoke test for the extension workflow.
+ * Browser smoke test for website adapters.
+ *
+ * Keep this test focused on page-side selectors and editor availability. The
+ * extension workflow itself is covered by unit-routing.test.js.
  *
  * Start Chrome with remote debugging enabled, then run:
  *   node browser-smoke.test.js

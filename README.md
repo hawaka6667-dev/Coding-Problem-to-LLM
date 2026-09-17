@@ -1,13 +1,3 @@
-# Exercism -> DeepSeek
-
-A Chrome extension that sends the current Exercism C exercise source to an
-open DeepSeek chat.
-
-## Requirements
-
-- Google Chrome
-- An Exercism account
-- An open, signed-in DeepSeek tab
 
 ## Install
 
@@ -18,20 +8,24 @@ open DeepSeek chat.
 
 ## Use
 
-1. Open a C exercise on Exercism:
+1. Open a exercise on Exercism:
 
    `https://exercism.org/tracks/c/exercises/<exercise>/edit`
 
-2. Keep DeepSeek open in another tab.
-3. Click the extension button or press `Ctrl+Shift+E`.
+2. Keep a supported LLM website open in another tab.
+3. Click the extension button or press `Ctrl+Shift+E` to send
+   coding problem to the LLM.
 
-The extension reads the exercise source, switches to DeepSeek, inserts it, and
-sends the message.
 
 ## Notes
 
 - Use the normal Exercism URL, not a `view-source:` URL.
-- This project currently focuses on Exercism C exercises.
+- This project currently focuses on Exercism C exercises and LeetCode problems.
+- The extension searches nearby tabs for DeepSeek, ChatGPT, Claude, Gemini, or
+   DeepAI. If none is open, it creates a DeepSeek tab to the left of the current
+   tab.
+- Only content captured from the website is sent; the extension does not add
+   labels, instructions, or Markdown formatting.
 
 For development notes and tests, see [DEVELOPMENT.md](DEVELOPMENT.md).
 

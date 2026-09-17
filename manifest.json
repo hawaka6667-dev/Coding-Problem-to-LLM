@@ -1,29 +1,54 @@
 {
   "manifest_version": 3,
-  "name": "Exercism → DeepSeek",
+  "name": "Coding Site2LLM",
   "version": "0.3.0",
-  "description": "Copy Exercism source and send it to DeepSeek.",
+  "description": "Capture coding-site context and send it to an LLM.",
+  "icons": {
+    "128": "icons/icon.svg"
+  },
   "permissions": [
     "tabs",
-    "debugger"
+    "scripting"
   ],
   "host_permissions": [
     "https://exercism.org/*",
     "https://leetcode.com/*",
-    "https://chat.deepseek.com/*"
+    "https://chat.deepseek.com/*",
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "https://deepai.org/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://exercism.org/tracks/*/exercises/*/edit*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
   "action": {
-    "default_title": "Exercism → DeepSeek"
+    "default_title": "Coding Site2LLM",
+    "default_icon": {
+      "16": "icons/icon.svg",
+      "32": "icons/icon.svg",
+      "48": "icons/icon.svg",
+      "128": "icons/icon.svg"
+    }
   },
   "commands": {
     "run-workflow": {
       "suggested_key": {
         "default": "Ctrl+Shift+E"
       },
-      "description": "Send Exercism source to DeepSeek"
+      "description": "Send coding-site context to an LLM"
     }
   }
 }
