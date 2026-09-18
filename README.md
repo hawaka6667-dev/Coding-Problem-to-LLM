@@ -1,4 +1,4 @@
-# Coding Site2LLM
+# Intro
 
 A Chrome extension that captures coding-site context from Exercism, LeetCode, and similar platforms and sends it directly to your LLM (DeepSeek, ChatGPT, Claude, Gemini, etc.) with one click.
 
