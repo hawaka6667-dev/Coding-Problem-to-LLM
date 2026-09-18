@@ -12,9 +12,9 @@ the manual development and testing workflow.
 -ctrl enter 伪提交热键
 -自动mark as complete
 
-## 测试 / Tests
+## 测试 / Tests 
 
-大部分架构已完成，只做最小测试
+架构完成后，只做最小测试
 
 整体维护时，过一遍功能测试
 
