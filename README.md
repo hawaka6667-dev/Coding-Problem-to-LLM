@@ -16,6 +16,8 @@ A Chrome extension that captures coding-site context from Exercism, LeetCode, an
 3. Click **Load unpacked**.
 4. Select this project folder.
 
+5. or download release
+
 ## License
 
 MIT License
