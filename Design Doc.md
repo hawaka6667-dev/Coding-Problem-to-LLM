@@ -17,8 +17,9 @@
 
 优化
 - Exercism：`Ctrl+Enter` 执行 `Run Tests`、`Continue without waiting`、`Submit`。
+- Exercism 通过后：从 exercise overview 页执行 `Mark as complete` → `Confirm`。
+- Exercism 自动Mark as complete
 - 发给 LLM 内容不包含图片媒体。
-
 
 
 /后续
@@ -28,3 +29,7 @@
 优化icon
 寻找社区issue然后过去发帖    包括但不限于国内外
 自动爬取git issue维护 No newline at end of file No newline at end of file
+
+Constraints:
+
+llm每实现一个功能必须要到这边注册

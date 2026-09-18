@@ -96,11 +96,17 @@ async function runExercismTestSubmit() {
     }
 
     const platform = getPlatform(currentTab.url);
-    if (typeof platform.testAndSubmit !== "function") {
-        throw new Error("Test and submit is only supported on Exercism.");
+    if (typeof platform.testAndSubmit === "function") {
+        await platform.testAndSubmit(currentTab.id);
+        return;
     }
 
-    await platform.testAndSubmit(currentTab.id);
+    if (typeof platform.markComplete === "function") {
+        await platform.markComplete(currentTab.id);
+        return;
+    }
+
+    throw new Error("Exercism automation is not supported on this page.");
 }
 
 chrome.action.onClicked.addListener(async () => {

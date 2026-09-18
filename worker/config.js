@@ -4,7 +4,10 @@
  */
 
 const EXERCISM_URL =
-    /^https:\/\/exercism\.org\/tracks\/[^/]+\/exercises\/[^/]+\/edit/;
+    /^https:\/\/exercism\.org\/tracks\/[^/]+\/exercises\/[^/?#]+\/edit(?:[/?#]|$)/;
+
+const EXERCISM_OVERVIEW_URL =
+    /^https:\/\/exercism\.org\/tracks\/[^/]+\/exercises\/[^/?#]+\/?(?:[?#]|$)/;
 
 const LEETCODE_URL =
     /^https:\/\/leetcode\.com\/problems\/[^/]+\/?/;

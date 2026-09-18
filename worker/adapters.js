@@ -84,6 +84,11 @@ const ExercismAdapter = {
         if (!submitted?.ok) {
             throw new Error(submitted?.reason || "Could not submit Exercism solution.");
         }
+
+        const overviewUrl = await waitForExercismOverview(tabId);
+        if (overviewUrl) {
+            await ExercismOverviewAdapter.markComplete(tabId);
+        }
     },
 
     async getContext(tabId) {
@@ -192,6 +197,7 @@ const LeetCodeAdapter = {
                 "";
             const description = visibleDescription
                 .replace(/Can\s+you\s+solve\s+this\s+real\s+interview\s+question\?\s*/i, "")
+                .replace(/(?:^|\n)\s*Beats\s+\d+(?:\.\d+)?%[^\n]*(?:\n|$)/gi, "\n")
                 .replace(/\s+/g, " ")
                 .split(/Questions\s+you\s+should\s+ask\s+yourself|Editorial/i)[0]
                 .trim();
@@ -325,3 +331,103 @@ const LeetCodeAdapter = {
         };
     }
 };
+
+const ExercismOverviewAdapter = {
+
+    name: "Exercism overview",
+
+    match(url) {
+        return EXERCISM_OVERVIEW_URL.test(url);
+    },
+
+    async markComplete(tabId) {
+        await completeExercismExercise(tabId);
+    }
+};
+
+async function waitForExercismOverview(tabId, timeout = 10000) {
+    const start = performance.now();
+
+    while (performance.now() - start < timeout) {
+        try {
+            const url = await executePage(tabId, () => window.location.href);
+            if (EXERCISM_OVERVIEW_URL.test(url)) {
+                return url;
+            }
+        } catch (_) {
+            // The tab may be between the editor and overview documents.
+        }
+
+        await sleep(100);
+    }
+
+    return "";
+}
+
+async function completeExercismExercise(tabId) {
+    let markedComplete = false;
+    const markStart = performance.now();
+
+    while (performance.now() - markStart < 5000) {
+        try {
+            markedComplete = await executePage(tabId, () => {
+                const button = [...document.querySelectorAll("button")]
+                    .find(candidate =>
+                        candidate.offsetWidth > 0 &&
+                        candidate.offsetHeight > 0 &&
+                        !candidate.disabled &&
+                        /mark as complete/i.test(
+                            candidate.innerText.trim()
+                        )
+                    );
+
+                if (!button) {
+                    return false;
+                }
+
+                button.click();
+                return true;
+            });
+        } catch (_) {
+            // Submission may navigate directly to the completed page.
+            return;
+        }
+
+        if (markedComplete) break;
+        await sleep(100);
+    }
+
+    if (!markedComplete) {
+        return;
+    }
+
+    const confirmStart = performance.now();
+    while (performance.now() - confirmStart < 5000) {
+        try {
+            const confirmed = await executePage(tabId, () => {
+                const button = [...document.querySelectorAll("button")]
+                    .find(candidate =>
+                        candidate.offsetWidth > 0 &&
+                        candidate.offsetHeight > 0 &&
+                        !candidate.disabled &&
+                        /^(confirm|complete)$/i.test(
+                            candidate.innerText.trim()
+                        )
+                    );
+
+                if (!button) {
+                    return false;
+                }
+
+                button.click();
+                return true;
+            });
+
+            if (confirmed) return;
+        } catch (_) {
+            return;
+        }
+
+        await sleep(100);
+    }
+}

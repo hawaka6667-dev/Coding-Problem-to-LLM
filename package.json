@@ -2,7 +2,7 @@
   "name": "coding-site2llm",
   "private": true,
   "scripts": {
-    "test": "node --test unit-routing.test.js",
-    "smoke": "node browser-smoke.test.js"
+    "test": "node --test tests/unit-routing.test.js",
+    "smoke": "node tests/browser-smoke.test.js"
   }
 }

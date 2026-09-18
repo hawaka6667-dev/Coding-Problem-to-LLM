@@ -2,13 +2,13 @@
  * Browser smoke test for website adapters.
  *
  * Keep this test focused on page-side selectors and editor availability. The
- * extension workflow itself is covered by unit-routing.test.js.
+ * extension workflow itself is covered by tests/unit-routing.test.js.
  *
  * Start Chrome with remote debugging enabled, then run:
- *   node browser-smoke.test.js
+ *   node tests/browser-smoke.test.js
  *
  * Optional:
- *   node browser-smoke.test.js --port 9222 --json
+ *   node tests/browser-smoke.test.js --port 9222 --json
  */
 
 const EXERCISM_URL =

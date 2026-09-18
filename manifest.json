@@ -4,7 +4,7 @@
   "version": "0.3.0",
   "description": "Capture coding-site context and send it to an LLM.",
   "icons": {
-    "128": "icons/icon.svg"
+    "128": "icons/icon128.png"
   },
   "permissions": [
     "tabs",
@@ -37,10 +37,10 @@
   "action": {
     "default_title": "Coding Site2LLM",
     "default_icon": {
-      "16": "icons/icon.svg",
-      "32": "icons/icon.svg",
-      "48": "icons/icon.svg",
-      "128": "icons/icon.svg"
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     }
   },
   "commands": {

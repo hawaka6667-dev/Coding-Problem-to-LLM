@@ -5,12 +5,14 @@
 
 const PLATFORMS = [
     ExercismAdapter,
+    ExercismOverviewAdapter,
     LeetCodeAdapter
 ];
 
 function cleanLeetCodeDescription(text) {
     return String(text || "")
         .replace(/Can\s+you\s+solve\s+this\s+real\s+interview\s+question\?\s*/i, "")
+        .replace(/(?:^|\n)\s*Beats\s+\d+(?:\.\d+)?%[^\n]*(?:\n|$)/gi, "\n")
         .replace(/\s+/g, " ")
         .split(/Questions\s+you\s+should\s+ask\s+yourself|Editorial/i)[0]
         .trim();
